@@ -1,0 +1,7 @@
+pylint
+click
+pytest
+pytest-cov
+boto3
+ipython
+flask
