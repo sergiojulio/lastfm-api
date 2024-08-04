@@ -127,3 +127,5 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+/warehouse
+yellow_tripdata_2023-01.parquet
