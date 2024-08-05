@@ -64,8 +64,36 @@ def warehouse():
    
 
 def query():
+
+    from pyiceberg.catalog.sql import SqlCatalog
+    import pyarrow.parquet as pq
+    import pyarrow.compute as pc
+
+
+    warehouse_path = "./warehouse"
+
+    catalog = SqlCatalog(
+        "default",
+        **{
+            "uri": f"sqlite:///{warehouse_path}/pyiceberg_catalog.db",
+            "warehouse": f"file://{warehouse_path}",
+        },
+    )  
+
+
+    table = catalog.load_table(('default', 'taxi_dataset'))
+
+    #print(table.describe())
+
+    con = table.scan().to_duckdb(table_name="taxi_dataset")
+
+
+    con.sql(
+        "SELECT * FROM taxi_dataset LIMIT 10"
+    ).show()
+      
     
 
 if __name__ == '__main__':
     #main()
-    warehouse()
+    query()
