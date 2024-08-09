@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 import os
 import requests
+from requests.exceptions import HTTPError
+import json
+import csv
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -11,11 +14,48 @@ load_dotenv(dotenv_path=dotenv_path)
 api_key = os.getenv('API_KEY')
 
 def main():
-    x = requests.get('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=radioheadve&api_key=' + api_key + '&format=json')
-    print(x.text)
+    try:
 
+        # date to timestamp
+
+        response = requests.get('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=radioheadve&api_key=' + api_key + '&from=1722470400&to=1722556799&format=json')
+        #print(response.text)
+
+        response.raise_for_status()
+        # access JSOn content
+        json_response = response.json()
+
+        pages = int(json_response['recenttracks']['@attr']['totalPages'])
+        i = 0
+        while i < pages:
+            print(i)
+            i += 1
+            get_tracks(start, end, page=i)
+            
+
+
+    except HTTPError as http_err:
+        print(f'HTTP error occurred: {http_err}')
+    except Exception as err:
+        print(f'Other error occurred: {err}')
+    # pagination logic for > page
     
 
+def get_tracks(start, end, page):
+    
+    try:
+        # request
+        response = requests.get('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=radioheadve&api_key=' + api_key + '&from=1722470400&to=1722556799&format=json')
+    
+        # return string csv format
+        
+    
+    except HTTPError as http_err:
+        print(f'HTTP error occurred: {http_err}')
+    except Exception as err:
+        print(f'Other error occurred: {err}')
+    
+    return True
 
 
 def warehouse():
@@ -95,5 +135,5 @@ def query():
     
 
 if __name__ == '__main__':
-    #main()
-    query()
+    main()
+    #query()
