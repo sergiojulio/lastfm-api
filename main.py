@@ -1,6 +1,7 @@
 #!/usr/bin/env python
-import os
+import os, sys
 import requests
+import datetime
 from requests.exceptions import HTTPError
 import json
 import csv
@@ -13,47 +14,105 @@ load_dotenv(dotenv_path=dotenv_path)
 # mastodon access token
 api_key = os.getenv('API_KEY')
 
-def main():
+
+def test(date='2024-08-02'):
+    date_from = date + ' 00:00:00'
+    date_to = date + ' 23:59:59'
+    print(int(datetime.datetime.strptime(date_from, "%Y-%m-%d %H:%M:%S").timestamp()))
+    print(int(datetime.datetime.strptime(date_to, "%Y-%m-%d %H:%M:%S").timestamp()))   
+
+
+def main(date='2024-08-02'):
     try:
 
         # date to timestamp
+        date_from = date + ' 00:00:00'
+        date_to = date + ' 23:59:59'
 
-        response = requests.get('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=radioheadve&api_key=' + api_key + '&from=1722470400&to=1722556799&format=json')
+        date_from = int(datetime.datetime.strptime(date_from, "%Y-%m-%d %H:%M:%S").timestamp())
+        date_to = int(datetime.datetime.strptime(date_to, "%Y-%m-%d %H:%M:%S").timestamp())
+
+
+        response = requests.get('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=radioheadve&api_key=' + api_key + '&from=' + str(date_from) + '&to=' + str(date_to) + '&format=json')
         #print(response.text)
 
         response.raise_for_status()
         # access JSOn content
         json_response = response.json()
 
+        # init list headers
+
         pages = int(json_response['recenttracks']['@attr']['totalPages'])
         i = 0
+
+        lists = []
+
         while i < pages:
             print(i)
             i += 1
-            get_tracks(start, end, page=i)
-            
+            # return list
+            list = get_tracks(start=date_from, end=date_to, page=i)
+            lists.append(list)  
 
+        print(lists)
+            
+        # close file
+        with open('./tracks-' + date + '.csv', 'w') as f:
+            w = csv.writer(f, delimiter=',')
+            # Other error occurred 1: iterable expected, not bool
+            for row in lists:
+                w.writerow(row)
 
     except HTTPError as http_err:
         print(f'HTTP error occurred: {http_err}')
     except Exception as err:
-        print(f'Other error occurred: {err}')
-    # pagination logic for > page
+        print(f'Other error occurred 1: {err}')
+
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        print(exc_type, fname, exc_tb.tb_lineno)
     
 
 def get_tracks(start, end, page):
     
     try:
         # request
-        response = requests.get('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=radioheadve&api_key=' + api_key + '&from=1722470400&to=1722556799&format=json')
+        response = requests.get('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=radioheadve&api_key=' + api_key + '&from=' + str(start) + '&to=' +  str(end) + '&page=' + str(page) + '&format=json')
     
-        # return string csv format
-        
+        # print('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=radioheadve&api_key=' + api_key + '&from=' + str(start) + '&to=' +  str(end) + '&page=' + str(page) + '&format=json')
+
+        lists = []
+
+        json_response = response.json()
+        # return list uts utc_time artist artist_mbid album album_mbid track track_mbid
+        tracks = json_response['recenttracks']['track']
+        for track in tracks:
+
+            if "date" in track:
+
+                #data = json.loads(json_data) 
+
+                list = [track['date']['uts'],
+                        track['date']['#text'],
+                        track['artist']['#text'],
+                        track['artist']['mbid'],
+                        track['album']['#text'],
+                        track['album']['mbid'],
+                        track['name'],
+                        track['mbid']]       
+                
+                lists.append(list)   
+
+        return lists
     
     except HTTPError as http_err:
         print(f'HTTP error occurred: {http_err}')
     except Exception as err:
-        print(f'Other error occurred: {err}')
+        print(f'Other error occurred 2: {err}')
+
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        print(exc_type, fname, exc_tb.tb_lineno)
     
     return True
 

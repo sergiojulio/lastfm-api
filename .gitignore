@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 /warehouse
 yellow_tripdata_2023-01.parquet
+tracks-2024-08-02.csv
