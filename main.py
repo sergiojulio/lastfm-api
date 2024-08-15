@@ -1,10 +1,8 @@
 #!/usr/bin/env python
 import os, sys
 import requests
-import datetime
+from datetime import datetime, timezone
 from requests.exceptions import HTTPError
-import json
-import csv
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -18,8 +16,13 @@ api_key = os.getenv('API_KEY')
 def test(date='2024-08-02'):
     date_from = date + ' 00:00:00'
     date_to = date + ' 23:59:59'
-    print(int(datetime.datetime.strptime(date_from, "%Y-%m-%d %H:%M:%S").timestamp()))
-    print(int(datetime.datetime.strptime(date_to, "%Y-%m-%d %H:%M:%S").timestamp()))   
+
+    dt = datetime.strptime(date_from, "%Y-%m-%d %H:%M:%S")
+
+    print(int(dt.replace(tzinfo=timezone.utc).timestamp()))
+
+    print(int(datetime.strptime(date_from, "%Y-%m-%d %H:%M:%S").timestamp()))
+    print(int(datetime.strptime(date_to, "%Y-%m-%d %H:%M:%S").timestamp()))   
 
 
 def main(date='2024-08-02'):
@@ -29,8 +32,11 @@ def main(date='2024-08-02'):
         date_from = date + ' 00:00:00'
         date_to = date + ' 23:59:59'
 
-        date_from = int(datetime.datetime.strptime(date_from, "%Y-%m-%d %H:%M:%S").timestamp())
-        date_to = int(datetime.datetime.strptime(date_to, "%Y-%m-%d %H:%M:%S").timestamp())
+        dt = datetime.strptime(date_from, "%Y-%m-%d %H:%M:%S")
+        date_from = int(dt.replace(tzinfo=timezone.utc).timestamp())
+
+        dt = datetime.strptime(date_to, "%Y-%m-%d %H:%M:%S")
+        date_to = int(dt.replace(tzinfo=timezone.utc).timestamp())
 
 
         response = requests.get('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=radioheadve&api_key=' + api_key + '&from=' + str(date_from) + '&to=' + str(date_to) + '&format=json')
@@ -44,24 +50,22 @@ def main(date='2024-08-02'):
 
         pages = int(json_response['recenttracks']['@attr']['totalPages'])
         i = 0
+        c = pages
 
-        lists = []
+        lists = ''
 
         while i < pages:
             print(i)
             i += 1
             # return list
-            list = get_tracks(start=date_from, end=date_to, page=i)
-            lists.append(list)  
-
-        print(lists)
+            list = get_tracks(start=date_from, end=date_to, page=c)
+            c -= 1
+            lists = lists + list
             
         # close file
         with open('./tracks-' + date + '.csv', 'w') as f:
-            w = csv.writer(f, delimiter=',')
-            # Other error occurred 1: iterable expected, not bool
-            for row in lists:
-                w.writerow(row)
+            f.write(lists)
+            f.close()
 
     except HTTPError as http_err:
         print(f'HTTP error occurred: {http_err}')
@@ -81,27 +85,25 @@ def get_tracks(start, end, page):
     
         # print('https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=radioheadve&api_key=' + api_key + '&from=' + str(start) + '&to=' +  str(end) + '&page=' + str(page) + '&format=json')
 
-        lists = []
+        lists = ''
 
         json_response = response.json()
-        # return list uts utc_time artist artist_mbid album album_mbid track track_mbid
+        # invert list
         tracks = json_response['recenttracks']['track']
-        for track in tracks:
+        for track in reversed(tracks):
 
             if "date" in track:
 
-                #data = json.loads(json_data) 
-
-                list = [track['date']['uts'],
-                        track['date']['#text'],
-                        track['artist']['#text'],
-                        track['artist']['mbid'],
-                        track['album']['#text'],
-                        track['album']['mbid'],
-                        track['name'],
-                        track['mbid']]       
+                list = ("'" + track['date']['uts'] + "'," +
+                        "'" + track['date']['#text'] + "'," +
+                        "'" + track['artist']['#text'] + "'," +
+                        "'" + track['artist']['mbid'] + "'," +
+                        "'" + track['album']['#text'] + "'," +
+                        "'" + track['album']['mbid'] + "'," +
+                        "'" + track['name'] + "'," +
+                        "'" + track['mbid'] + "'\n")     
                 
-                lists.append(list)   
+                lists = lists + list 
 
         return lists
     
