@@ -52,7 +52,7 @@ def main(date='2024-08-02'):
         i = 0
         c = pages
 
-        lists = ''
+        lists = 'date,date_text,artist,artist_mbid,album,album_mbid,track,track_mbid\n'
 
         while i < pages:
             print(i)
@@ -94,14 +94,14 @@ def get_tracks(start, end, page):
 
             if "date" in track:
 
-                list = ("'" + track['date']['uts'] + "'," +
-                        "'" + track['date']['#text'] + "'," +
-                        "'" + track['artist']['#text'] + "'," +
-                        "'" + track['artist']['mbid'] + "'," +
-                        "'" + track['album']['#text'] + "'," +
-                        "'" + track['album']['mbid'] + "'," +
-                        "'" + track['name'] + "'," +
-                        "'" + track['mbid'] + "'\n")     
+                list = ('"' + track['date']['uts'] + '",' +
+                        '"' + track['date']['#text'] + '",' +
+                        '"' + track['artist']['#text'] + '",' +
+                        '"' + track['artist']['mbid'] + '",' +
+                        '"' + track['album']['#text'] + '",' +
+                        '"' + track['album']['mbid'] + '",' +
+                        '"' + track['name'] + '",' +
+                        '"' + track['mbid'] + '"\n')     
                 
                 lists = lists + list 
 
@@ -167,8 +167,6 @@ def warehouse():
 def query():
 
     from pyiceberg.catalog.sql import SqlCatalog
-    import pyarrow.parquet as pq
-    import pyarrow.compute as pc
 
 
     warehouse_path = "./warehouse"
@@ -182,19 +180,44 @@ def query():
     )  
 
 
-    table = catalog.load_table(('default', 'taxi_dataset'))
+    table = catalog.load_table(('default', 'tracks'))
 
     #print(table.describe())
 
-    con = table.scan().to_duckdb(table_name="taxi_dataset")
+    con = table.scan().to_duckdb(table_name="tracks")
 
 
     con.sql(
-        "SELECT * FROM taxi_dataset LIMIT 10"
+        "SELECT * FROM tracks WHERE artist = 'Jamie xx'"
     ).show()
       
+
+def create_table():
+
+    from pyiceberg.catalog.sql import SqlCatalog
+    import pyarrow.csv as pc
+
+    warehouse_path = "./warehouse"
+
+    catalog = SqlCatalog(
+        "default",
+        **{
+            "uri": f"sqlite:///{warehouse_path}/pyiceberg_catalog.db",
+            "warehouse": f"file://{warehouse_path}",
+        },
+    )
+
+    df = pc.read_csv("./tracks-2024-08-02.csv")
+
+    table = catalog.create_table(
+        "default.tracks",
+        schema=df.schema
+    ) 
+
+    # create a physical table in warehouse folder? or point to file? 
+    table.append(df)
+
     
 
 if __name__ == '__main__':
-    main()
-    #query()
+    query()
