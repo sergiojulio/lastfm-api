@@ -52,7 +52,7 @@ def main(date='2024-08-02'):
         i = 0
         c = pages
 
-        lists = 'date,date_text,artist,artist_mbid,album,album_mbid,track,track_mbid\n'
+        lists = 'timestamp,date_text,artist,artist_mbid,album,album_mbid,track,track_mbid\n'
 
         while i < pages:
             print(i)
@@ -162,7 +162,24 @@ def warehouse():
     df = table.scan(row_filter="tip_per_mile > 0").to_arrow()
 
     len(df)
-   
+
+
+def drop_table():
+
+    from pyiceberg.catalog.sql import SqlCatalog
+    warehouse_path = "./warehouse"
+
+    catalog = SqlCatalog(
+        "default",
+        **{
+            "uri": f"sqlite:///{warehouse_path}/pyiceberg_catalog.db",
+            "warehouse": f"file://{warehouse_path}",
+        },
+    )  
+
+    catalog.drop_table("default.tracks")
+
+
 
 def query():
 
@@ -194,7 +211,12 @@ def query():
 
 def create_table():
 
+    from pyiceberg.schema import Schema
+    from pyiceberg.types import DateType, StringType
+    from pyiceberg.partitioning import PartitionSpec
     from pyiceberg.catalog.sql import SqlCatalog
+
+    import pyarrow as pa
     import pyarrow.csv as pc
 
     warehouse_path = "./warehouse"
@@ -206,18 +228,63 @@ def create_table():
             "warehouse": f"file://{warehouse_path}",
         },
     )
+    # timpestamp,date_text,artist,artist_mbid,album,album_mbid,track,track_mbid
+
+    """
+    schema = pa.schema([
+        ('timpestamp', pa.int32()),
+        ('date_text', pa.string()),
+        ('artist', pa.string()),
+        ('artist_mbid', pa.string()),
+        ('album', pa.string()),
+        ('album_mbid', pa.string()),
+        ('track', pa.string()),
+        ('track_mbid', pa.string())
+    ])    
+    """
 
     df = pc.read_csv("./tracks-2024-08-02.csv")
 
+    df = df.append_column("date", pa.array(['2024-08-01'] * len(df), pa.string()))
+
+    schema = Schema(
+        ('timpestamp', StringType()),
+        ('date_text', StringType()),
+        ('artist', StringType()),
+        ('artist_mbid', StringType()),
+        ('album', StringType()),
+        ('album_mbid', StringType()),
+        ('track', StringType()),
+        ('track_mbid', StringType()),
+        ('date', DateType())
+    )
+
+
+    #df = df.partition_to_path([("year", 2024), ("month", 8)], df.schema)
+    # schema puede ser pyarrow o pyiceberg
+    partition_spec = PartitionSpec.builder_for(schema).identity("date").build()
+
     table = catalog.create_table(
         "default.tracks",
-        schema=df.schema
+        schema=schema,
+        partition_spec=partition_spec
     ) 
 
+
     # create a physical table in warehouse folder? or point to file? 
-    table.append(df)
+    # table.append(df)
+
+    #len(table.scan().to_arrow())
+
+    # will this instruction add a new column to parquet file?
+    
+    # with table.update_schema() as update_schema:
+    #     update_schema.union_by_name(df.schema)    
+
+    table.overwrite(df)
+
 
     
 
 if __name__ == '__main__':
-    query()
+    create_table()
