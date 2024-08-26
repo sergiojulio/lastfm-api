@@ -25,7 +25,8 @@ def test(date='2024-08-02'):
     print(int(datetime.strptime(date_to, "%Y-%m-%d %H:%M:%S").timestamp()))   
 
 
-def main(date='2024-08-02'):
+#EXTRACT
+def main(date='2024-08-03'):
     try:
 
         # date to timestamp
@@ -180,7 +181,6 @@ def drop_table():
     catalog.drop_table("default.tracks")
 
 
-
 def query():
 
     from pyiceberg.catalog.sql import SqlCatalog
@@ -205,17 +205,20 @@ def query():
 
 
     con.sql(
-        "SELECT * FROM tracks WHERE artist = 'Jamie xx'"
+        "SELECT * FROM tracks WHERE date = '2024-08-03' LIMIT 10"
     ).show()
       
 
 def create_table():
 
+    from datetime import date
+
     from pyiceberg.schema import Schema
-    from pyiceberg.types import DateType, StringType
-    from pyiceberg.partitioning import PartitionSpec
+    from pyiceberg.types import NestedField, IntegerType, StringType, DateType, TimestampType, LongType
+    from pyiceberg.partitioning import PartitionSpec, PartitionField, IdentityTransform, DayTransform
     from pyiceberg.catalog.sql import SqlCatalog
 
+    # pandas
     import pyarrow as pa
     import pyarrow.csv as pc
 
@@ -243,26 +246,32 @@ def create_table():
     ])    
     """
 
+    #1722556800
+    #999999999
     df = pc.read_csv("./tracks-2024-08-02.csv")
 
-    df = df.append_column("date", pa.array(['2024-08-01'] * len(df), pa.string()))
+    #df = df.append_column("date", pa.array([1722571] * len(df), pa.date32()))
+    df = df.append_column("date", pa.array([date(2024, 8, 2)] * len(df), pa.date32()))
+
+    # table_partitions = pyarrow.compute.partition(arrow_table, partition_columns)
 
     schema = Schema(
-        ('timpestamp', StringType()),
-        ('date_text', StringType()),
-        ('artist', StringType()),
-        ('artist_mbid', StringType()),
-        ('album', StringType()),
-        ('album_mbid', StringType()),
-        ('track', StringType()),
-        ('track_mbid', StringType()),
-        ('date', DateType())
+        NestedField(field_id=1, name='timestamp', field_type=LongType(), required=False),
+        NestedField(field_id=2, name='date_text', field_type=StringType(), required=False),
+        NestedField(field_id=3, name='artist', field_type=StringType(), required=False),
+        NestedField(field_id=4, name='artist_mbid', field_type=StringType(), required=False),
+        NestedField(field_id=5, name='album', field_type=StringType(), required=False),
+        NestedField(field_id=6, name='album_mbid', field_type=StringType(), required=False),
+        NestedField(field_id=7, name='track', field_type=StringType(), required=False),
+        NestedField(field_id=8, name='track_mbid', field_type=StringType(), required=False),
+        NestedField(field_id=9, name='date', field_type=DateType(), required=False)
     )
 
 
     #df = df.partition_to_path([("year", 2024), ("month", 8)], df.schema)
     # schema puede ser pyarrow o pyiceberg
-    partition_spec = PartitionSpec.builder_for(schema).identity("date").build()
+    partition_spec = PartitionSpec(PartitionField(source_id=9, field_id=9, transform=IdentityTransform(), name="date"), spec_id=1)
+    # partition_spec = PartitionSpec.builder_for(schema).identity("date").build()
 
     table = catalog.create_table(
         "default.tracks",
@@ -270,21 +279,46 @@ def create_table():
         partition_spec=partition_spec
     ) 
 
-
-    # create a physical table in warehouse folder? or point to file? 
     # table.append(df)
 
-    #len(table.scan().to_arrow())
-
-    # will this instruction add a new column to parquet file?
-    
-    # with table.update_schema() as update_schema:
-    #     update_schema.union_by_name(df.schema)    
+    with table.update_schema() as update_schema:
+         update_schema.union_by_name(df.schema)    
 
     table.overwrite(df)
 
 
+#LOAD
+def write_data(date='2024-08-03'):
+
+    from datetime import date
+    from pyiceberg.catalog.sql import SqlCatalog
+
+    # pandas
+    import pyarrow as pa
+    import pyarrow.csv as pc
+
+    warehouse_path = "./warehouse"
+
+    catalog = SqlCatalog(
+        "default",
+        **{
+            "uri": f"sqlite:///{warehouse_path}/pyiceberg_catalog.db",
+            "warehouse": f"file://{warehouse_path}",
+        },
+    )
+
+    df = pc.read_csv("./tracks-2024-08-03.csv")
+
+    df = df.append_column("date", pa.array([date(2024, 8, 3)] * len(df), pa.date32()))
+
+    table = catalog.load_table("default.tracks")
+
+    table.overwrite(df)    
+
+
+#EXTRACT
     
 
 if __name__ == '__main__':
-    create_table()
+    query()
+
