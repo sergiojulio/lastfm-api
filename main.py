@@ -26,7 +26,7 @@ def test(date='2024-08-02'):
 
 
 #EXTRACT
-def main(date='2024-08-03'):
+def extract(date='2024-08-03'):
     try:
 
         # date to timestamp
@@ -119,7 +119,7 @@ def get_tracks(start, end, page):
     
     return True
 
-
+# Create de database and schema
 def warehouse():
 
     from pyiceberg.catalog.sql import SqlCatalog
