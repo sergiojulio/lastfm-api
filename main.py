@@ -120,87 +120,9 @@ def query(schema):
     con = table.scan().to_duckdb(table_name="tracks")
 
     con.sql(
-        "SELECT date, COUNT(*) total FROM tracks GROUP BY date"
+        "SELECT date, COUNT(*) total FROM tracks GROUP BY date ORDER BY date ASC"
     ).show()
       
-
-def create_table():
-
-    from datetime import date
-
-    from pyiceberg.schema import Schema
-    from pyiceberg.types import NestedField, IntegerType, StringType, DateType, TimestampType, LongType
-    from pyiceberg.partitioning import PartitionSpec, PartitionField, IdentityTransform, DayTransform
-    from pyiceberg.catalog.sql import SqlCatalog
-
-    # pandas
-    import pyarrow as pa
-    import pyarrow.csv as pc
-
-    warehouse_path = "./warehouse"
-
-    catalog = SqlCatalog(
-        "default",
-        **{
-            "uri": f"sqlite:///{warehouse_path}/pyiceberg_catalog.db",
-            "warehouse": f"file://{warehouse_path}",
-        },
-    )
-    # timpestamp,date_text,artist,artist_mbid,album,album_mbid,track,track_mbid
-
-    """
-    schema = pa.schema([
-        ('timpestamp', pa.int32()),
-        ('date_text', pa.string()),
-        ('artist', pa.string()),
-        ('artist_mbid', pa.string()),
-        ('album', pa.string()),
-        ('album_mbid', pa.string()),
-        ('track', pa.string()),
-        ('track_mbid', pa.string())
-    ])    
-    """
-
-    #1722556800
-    #999999999
-    df = pc.read_csv(warehouse_path + "raw/tracks-2024-08-02.csv")
-
-    #df = df.append_column("date", pa.array([1722571] * len(df), pa.date32()))
-    df = df.append_column("date", pa.array([date(2024, 8, 2)] * len(df), pa.date32()))
-
-    # table_partitions = pyarrow.compute.partition(arrow_table, partition_columns)
-
-    schema = Schema(
-        NestedField(field_id=1, name='timestamp', field_type=LongType(), required=False),
-        NestedField(field_id=2, name='date_text', field_type=StringType(), required=False),
-        NestedField(field_id=3, name='artist', field_type=StringType(), required=False),
-        NestedField(field_id=4, name='artist_mbid', field_type=StringType(), required=False),
-        NestedField(field_id=5, name='album', field_type=StringType(), required=False),
-        NestedField(field_id=6, name='album_mbid', field_type=StringType(), required=False),
-        NestedField(field_id=7, name='track', field_type=StringType(), required=False),
-        NestedField(field_id=8, name='track_mbid', field_type=StringType(), required=False),
-        NestedField(field_id=9, name='date', field_type=DateType(), required=False)
-    )
-
-
-    #df = df.partition_to_path([("year", 2024), ("month", 8)], df.schema)
-    # schema puede ser pyarrow o pyiceberg
-    partition_spec = PartitionSpec(PartitionField(source_id=9, field_id=9, transform=IdentityTransform(), name="date"), spec_id=1)
-    # partition_spec = PartitionSpec.builder_for(schema).identity("date").build()
-
-    table = catalog.create_table(
-        "default.tracks",
-        schema=schema,
-        partition_spec=partition_spec
-    ) 
-
-    # table.append(df)
-
-    with table.update_schema() as update_schema:
-        update_schema.union_by_name(df.schema)    
-
-    table.overwrite(df)
-
 
 #EXTRACT
 def extract(date):
@@ -293,6 +215,7 @@ def load(date):
 
     from datetime import date as dt
     from pyiceberg.catalog.sql import SqlCatalog
+    from pyiceberg.expressions import NotEqualTo   
     import pyarrow as pa
     import pyarrow.csv as pc
 
@@ -308,7 +231,13 @@ def load(date):
 
     table = catalog.load_table("silver.tracks")
 
-    df = pc.read_csv("./csv/tracks-" + date + ".csv")
+    df = table.scan(
+        row_filter = NotEqualTo("date", date)
+    ).to_arrow()  
+
+    table.overwrite(df) 
+
+    df = pc.read_csv(warehouse_path + "/raw/tracks-" + date + ".csv")
 
     year, month, day = map(int, date.split('-'))
 
@@ -321,7 +250,7 @@ def load(date):
 def transformation(date):
 
     from pyiceberg.catalog.sql import SqlCatalog
-    from pyiceberg.expressions import EqualTo
+    from pyiceberg.expressions import EqualTo, NotEqualTo
 
     import pyarrow as pa
     import pyarrow.compute as pc
@@ -353,9 +282,14 @@ def transformation(date):
 
     gold_table = catalog.load_table(('gold', 'tracks'))
 
+    df = gold_table.scan(
+        row_filter = NotEqualTo("date", date)
+    ).to_arrow()  
+
+    gold_table.overwrite(df) 
+
     with gold_table.update_schema() as update_schema:
         update_schema.union_by_name(silver_df.schema)    
-
 
     gold_table.append(silver_df) 
 
@@ -363,7 +297,7 @@ def transformation(date):
 if __name__ == '__main__':
 
     #warehouse()
-    date = "2024-08-02"
+    date = "2024-08-04"
     extract(date)
     load(date)
     query('silver')
